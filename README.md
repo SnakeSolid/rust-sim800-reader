@@ -1,6 +1,8 @@
 # SIM800 Reader
 
-Simple utility to receive SMS messages using SIM800 module serial port api.
+Simple utility to receive SMS messages using SIM800 module serial port API.
+
+![Wiring diagram](images/wiring.png "Wiring diagram")
 
 ## Build
 
