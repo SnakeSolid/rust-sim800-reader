@@ -47,17 +47,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     sim800.send(r#"AT+CMGF=1"#)?;
     sim800.send(r#"AT+CSCS="UCS2""#)?;
 
-    if arguments.delete_messages() {
-        for message in sim800.send_list(r#"AT+CMGL="ALL""#)? {
-            match message {
-                Response::ListSmsMessage { index, .. } => {
-                    sim800.send(&format!(r#"AT+CMGD={},0"#, index))?
-                }
-                _ => {}
-            }
-        }
-    }
-
     if arguments.list_messages() {
         for message in sim800.send_list(r#"AT+CMGL="ALL""#)? {
             match message {
@@ -82,6 +71,17 @@ fn main() -> Result<(), Box<dyn Error>> {
                         mark,
                         text,
                     );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if arguments.delete_messages() {
+        for message in sim800.send_list(r#"AT+CMGL="ALL""#)? {
+            match message {
+                Response::ListSmsMessage { index, .. } => {
+                    sim800.send(&format!(r#"AT+CMGD={},0"#, index))?
                 }
                 _ => {}
             }
