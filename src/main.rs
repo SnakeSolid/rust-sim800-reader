@@ -86,6 +86,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 _ => {}
             }
         }
+
+        println!("All SMS messages removed.");
     }
 
     Ok(())
