@@ -14,7 +14,6 @@ use nom::combinator::map_res;
 use nom::combinator::opt;
 use nom::error::Error as NomError;
 use nom::sequence::delimited;
-use nom::sequence::tuple;
 use nom::Err;
 use nom::Parser;
 use time::Date;
@@ -97,6 +96,7 @@ impl From<u8> for NetworkRegistrationMode {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum NetworkRegistrationStatus {
+    NotRegistered,
     Registered,
     SearchingOperator,
     RegistratonDenied,
@@ -107,12 +107,13 @@ pub enum NetworkRegistrationStatus {
 impl From<u8> for NetworkRegistrationStatus {
     fn from(value: u8) -> Self {
         match value {
+            0 => Self::NotRegistered,
             1 => Self::Registered,
             2 => Self::SearchingOperator,
             3 => Self::RegistratonDenied,
             4 => Self::Unknown,
             5 => Self::RegisteredRoaming,
-            _ => unreachable!(),
+            _ => unreachable!("Invalid network registration status: {}", value),
         }
     }
 }
@@ -390,21 +391,22 @@ fn ucs2_to_uft8(text: &str) -> String {
     result
 }
 
-fn parse_quoted_text<'a>() -> impl Parser<&'a str, &'a str, NomError<&'a str>> {
+fn parse_quoted_text<'a>() -> impl Parser<&'a str, Output = &'a str, Error = NomError<&'a str>> {
     alt((tag("\"\""), delimited(char('"'), is_not("\""), char('"'))))
 }
 
-fn parse_quoted_hex<'a>() -> impl Parser<&'a str, String, NomError<&'a str>> {
+fn parse_quoted_hex<'a>() -> impl Parser<&'a str, Output = String, Error = NomError<&'a str>> {
     map(delimited(char('"'), hex_digit0, char('"')), ucs2_to_uft8)
 }
 
-fn parse_string_hex<'a>() -> impl Parser<&'a str, String, NomError<&'a str>> {
+fn parse_string_hex<'a>() -> impl Parser<&'a str, Output = String, Error = NomError<&'a str>> {
     map(hex_digit0, ucs2_to_uft8)
 }
 
-fn parse_timestamp<'a>() -> impl Parser<&'a str, OffsetDateTime, NomError<&'a str>> {
+fn parse_timestamp<'a>() -> impl Parser<&'a str, Output = OffsetDateTime, Error = NomError<&'a str>>
+{
     map_res(
-        tuple((char('"'),
+        (char('"'),
         	i16,
         	char('/'),
         	u8,
@@ -417,7 +419,7 @@ fn parse_timestamp<'a>() -> impl Parser<&'a str, OffsetDateTime, NomError<&'a st
         	char(':'),
         	u8,
         	i8,
-        	char('"'))),
+        	char('"')),
         |(_, year,_, month,_, day,_, hour,_, minute,_, second, _, _)| -> Result<OffsetDateTime, Box<dyn Error>> {
         	let date = Date::from_calendar_date(2000 + year as i32, Month::try_from(month)?, day)?;
         	let time = Time::from_hms(hour, minute, second)?;
@@ -428,74 +430,80 @@ fn parse_timestamp<'a>() -> impl Parser<&'a str, OffsetDateTime, NomError<&'a st
 }
 
 fn parse_operator_selection_mode<'a>(
-) -> impl Parser<&'a str, OperatorSelectionMode, NomError<&'a str>> {
+) -> impl Parser<&'a str, Output = OperatorSelectionMode, Error = NomError<&'a str>> {
     map(u8, OperatorSelectionMode::from)
 }
 
 fn parse_network_registration_mode<'a>(
-) -> impl Parser<&'a str, NetworkRegistrationMode, NomError<&'a str>> {
+) -> impl Parser<&'a str, Output = NetworkRegistrationMode, Error = NomError<&'a str>> {
     map(u8, NetworkRegistrationMode::from)
 }
 
 fn parse_network_registration_status<'a>(
-) -> impl Parser<&'a str, NetworkRegistrationStatus, NomError<&'a str>> {
+) -> impl Parser<&'a str, Output = NetworkRegistrationStatus, Error = NomError<&'a str>> {
     map(u8, NetworkRegistrationStatus::from)
 }
 
 fn parse_phone_activity_status_status<'a>(
-) -> impl Parser<&'a str, PhoneActivityStatus, NomError<&'a str>> {
+) -> impl Parser<&'a str, Output = PhoneActivityStatus, Error = NomError<&'a str>> {
     map(u8, PhoneActivityStatus::from)
 }
 
-fn parse_signal_quality_rssi<'a>() -> impl Parser<&'a str, SignalQualityRssi, NomError<&'a str>> {
+fn parse_signal_quality_rssi<'a>(
+) -> impl Parser<&'a str, Output = SignalQualityRssi, Error = NomError<&'a str>> {
     map(u8, SignalQualityRssi::from)
 }
 
 fn parse_signal_quality_error_rate<'a>(
-) -> impl Parser<&'a str, SignalQualityErrorRate, NomError<&'a str>> {
+) -> impl Parser<&'a str, Output = SignalQualityErrorRate, Error = NomError<&'a str>> {
     map(u8, SignalQualityErrorRate::from)
 }
 
-fn parse_battery_charge_status<'a>() -> impl Parser<&'a str, BatteryChargeStatus, NomError<&'a str>>
-{
+fn parse_battery_charge_status<'a>(
+) -> impl Parser<&'a str, Output = BatteryChargeStatus, Error = NomError<&'a str>> {
     map(u8, BatteryChargeStatus::from)
 }
 
-fn parse_sms_messages_status<'a>() -> impl Parser<&'a str, SmsMessageStatus, NomError<&'a str>> {
+fn parse_sms_messages_status<'a>(
+) -> impl Parser<&'a str, Output = SmsMessageStatus, Error = NomError<&'a str>> {
     map(parse_quoted_text(), SmsMessageStatus::from)
 }
 
-fn parse_sms_message_storage<'a>() -> impl Parser<&'a str, SmsMessageStorage, NomError<&'a str>> {
+fn parse_sms_message_storage<'a>(
+) -> impl Parser<&'a str, Output = SmsMessageStorage, Error = NomError<&'a str>> {
     map(parse_quoted_text(), SmsMessageStorage::from)
 }
 
-fn parse_call_direction<'a>() -> impl Parser<&'a str, CallDirection, NomError<&'a str>> {
+fn parse_call_direction<'a>(
+) -> impl Parser<&'a str, Output = CallDirection, Error = NomError<&'a str>> {
     map(u8, CallDirection::from)
 }
 
-fn parse_call_state<'a>() -> impl Parser<&'a str, CallState, NomError<&'a str>> {
+fn parse_call_state<'a>() -> impl Parser<&'a str, Output = CallState, Error = NomError<&'a str>> {
     map(u8, CallState::from)
 }
 
-fn parse_call_mode<'a>() -> impl Parser<&'a str, CallMode, NomError<&'a str>> {
+fn parse_call_mode<'a>() -> impl Parser<&'a str, Output = CallMode, Error = NomError<&'a str>> {
     map(u8, CallMode::from)
 }
 
-fn parse_call_multiparty<'a>() -> impl Parser<&'a str, CallMultiparty, NomError<&'a str>> {
+fn parse_call_multiparty<'a>(
+) -> impl Parser<&'a str, Output = CallMultiparty, Error = NomError<&'a str>> {
     map(u8, CallMultiparty::from)
 }
 
-fn parse_operator_selection<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_operator_selection<'a>(
+) -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(
-        tuple((
+        (
             tag("+COPS: "),
             parse_operator_selection_mode(),
             opt(map(
-                tuple((char(','), u8, char(','), parse_quoted_text())),
+                (char(','), u8, char(','), parse_quoted_text()),
                 |(_, format, _, operator)| (format, operator),
             )),
             tag("\r\r"),
-        )),
+        ),
         |(_, mode, args, _)| Response::OperatorSelection {
             mode,
             format: args.map(|(format, _)| format.into()),
@@ -504,24 +512,25 @@ fn parse_operator_selection<'a>() -> impl Parser<&'a str, Response, NomError<&'a
     )
 }
 
-fn parse_network_registration<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_network_registration<'a>(
+) -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(
-        tuple((
+        (
             tag("+CREG: "),
             parse_network_registration_mode(),
             char(','),
             parse_network_registration_status(),
             opt(map(
-                tuple((
+                (
                     char(','),
                     parse_quoted_text(),
                     char(','),
                     parse_quoted_text(),
-                )),
+                ),
                 |(_, location, _, cell_id)| (location, cell_id),
             )),
             tag("\r\r"),
-        )),
+        ),
         |(_, mode, _, status, args, _)| Response::NetworkRegistration {
             mode,
             status,
@@ -531,33 +540,36 @@ fn parse_network_registration<'a>() -> impl Parser<&'a str, Response, NomError<&
     )
 }
 
-fn parse_phone_activity_status<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_phone_activity_status<'a>(
+) -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(
-        tuple((
+        (
             tag("+CPAS: "),
             parse_phone_activity_status_status(),
             tag("\r\r"),
-        )),
+        ),
         |(_, status, _)| Response::PhoneActivityStatus { status },
     )
 }
 
-fn parse_signal_quality<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_signal_quality<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>>
+{
     map(
-        tuple((
+        (
             tag("+CSQ: "),
             parse_signal_quality_rssi(),
             char(','),
             parse_signal_quality_error_rate(),
             tag("\r\r"),
-        )),
+        ),
         |(_, rssi, _, error_rate, _)| Response::SignalQuality { rssi, error_rate },
     )
 }
 
-fn parse_battery_charge<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_battery_charge<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>>
+{
     map(
-        tuple((
+        (
             tag("+CBC: "),
             parse_battery_charge_status(),
             char(','),
@@ -565,7 +577,7 @@ fn parse_battery_charge<'a>() -> impl Parser<&'a str, Response, NomError<&'a str
             char(','),
             u16,
             tag("\r\r"),
-        )),
+        ),
         |(_, status, _, level, _, voltage, _)| Response::BatteryCharge {
             status,
             level,
@@ -574,9 +586,10 @@ fn parse_battery_charge<'a>() -> impl Parser<&'a str, Response, NomError<&'a str
     )
 }
 
-fn parse_list_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_list_sms_messages<'a>(
+) -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(
-        tuple((
+        (
             tag("+CMGL: "),
             u16,
             char(','),
@@ -590,7 +603,7 @@ fn parse_list_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a 
             char('\r'),
             parse_string_hex(),
             tag("\r\r"),
-        )),
+        ),
         |(_, index, _, status, _, address, _, address_text, _, timestamp, _, text, _)| {
             Response::ListSmsMessage {
                 index,
@@ -604,9 +617,10 @@ fn parse_list_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a 
     )
 }
 
-fn parse_read_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_read_sms_messages<'a>(
+) -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(
-        tuple((
+        (
             tag("+CMGR: "),
             parse_sms_messages_status(),
             char(','),
@@ -618,7 +632,7 @@ fn parse_read_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a 
             char('\r'),
             parse_string_hex(),
             tag("\r\r"),
-        )),
+        ),
         |(_, status, _, address, _, address_text, _, timestamp, _, text, _)| {
             Response::ReadSmsMessage {
                 status,
@@ -631,22 +645,24 @@ fn parse_read_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a 
     )
 }
 
-fn parse_new_sms_messages<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_new_sms_messages<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>>
+{
     map(
-        tuple((
+        (
             tag("+CMTI: "),
             parse_sms_message_storage(),
             char(','),
             u16,
             char('\r'),
-        )),
+        ),
         |(_, storage, _, index, _)| Response::NewSmsMessage { storage, index },
     )
 }
 
-fn parse_list_current_calls<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_list_current_calls<'a>(
+) -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(
-        tuple((
+        (
             tag("+CLCC: "),
             u16,
             char(','),
@@ -657,16 +673,16 @@ fn parse_list_current_calls<'a>() -> impl Parser<&'a str, Response, NomError<&'a
             parse_call_mode(),
             char(','),
             parse_call_multiparty(),
-            opt(tuple((
+            opt((
                 char(','),
                 parse_quoted_text(),
                 char(','),
                 u16,
                 char(','),
                 parse_quoted_text(),
-            ))),
+            )),
             tag("\r\r"),
-        )),
+        ),
         |(_, index, _, direction, _, state, _, mode, _, multiparty, data, _)| {
             Response::ListCurrentCalls {
                 index,
@@ -682,43 +698,37 @@ fn parse_list_current_calls<'a>() -> impl Parser<&'a str, Response, NomError<&'a
     )
 }
 
-fn parse_ok<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_ok<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(tag("OK\r"), |_| Response::Ok)
 }
 
-fn parse_error<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_error<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(tag("ERROR\r"), |_| {
         Response::Error(MobileEquipmentError::Disabled)
     })
 }
 
-fn parse_error_code<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_error_code<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     alt((
-        map(
-            tuple((tag("+CME ERROR: "), u16, char('\r'))),
-            |(_, code, _)| {
-                Response::Error(MobileEquipmentError::Code {
-                    source: EquipmentErrorSource::Mobile,
-                    code,
-                })
-            },
-        ),
-        map(
-            tuple((tag("+CMS ERROR: "), u16, char('\r'))),
-            |(_, code, _)| {
-                Response::Error(MobileEquipmentError::Code {
-                    source: EquipmentErrorSource::Service,
-                    code,
-                })
-            },
-        ),
+        map((tag("+CME ERROR: "), u16, char('\r')), |(_, code, _)| {
+            Response::Error(MobileEquipmentError::Code {
+                source: EquipmentErrorSource::Mobile,
+                code,
+            })
+        }),
+        map((tag("+CMS ERROR: "), u16, char('\r')), |(_, code, _)| {
+            Response::Error(MobileEquipmentError::Code {
+                source: EquipmentErrorSource::Service,
+                code,
+            })
+        }),
     ))
 }
 
-fn parse_error_message<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_error_message<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     alt((
         map(
-            tuple((tag("+CME ERROR: "), is_not("\r"), char('\r'))),
+            (tag("+CME ERROR: "), is_not("\r"), char('\r')),
             |(_, message, _): (_, &str, _)| {
                 Response::Error(MobileEquipmentError::Message {
                     source: EquipmentErrorSource::Mobile,
@@ -727,7 +737,7 @@ fn parse_error_message<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>
             },
         ),
         map(
-            tuple((tag("+CMS ERROR: "), is_not("\r"), char('\r'))),
+            (tag("+CMS ERROR: "), is_not("\r"), char('\r')),
             |(_, message, _): (_, &str, _)| {
                 Response::Error(MobileEquipmentError::Message {
                     source: EquipmentErrorSource::Service,
@@ -738,27 +748,27 @@ fn parse_error_message<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>
     ))
 }
 
-fn parse_call_ready<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_call_ready<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(tag("Call Ready\r"), |_| Response::CallReady)
 }
 
-fn parse_sms_ready<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_sms_ready<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(tag("SMS Ready\r"), |_| Response::SmsReady)
 }
 
-fn parse_ring<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_ring<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(tag("RING\r"), |_| Response::Ring)
 }
 
-fn parse_no_carrier<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_no_carrier<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(tag("NO CARRIER\r"), |_| Response::NoCarrier)
 }
 
-fn parse_empty<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parse_empty<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     map(char('\r'), |_| Response::Empty)
 }
 
-fn parser<'a>() -> impl Parser<&'a str, Response, NomError<&'a str>> {
+fn parser<'a>() -> impl Parser<&'a str, Output = Response, Error = NomError<&'a str>> {
     alt((
         parse_ok(),
         parse_error(),

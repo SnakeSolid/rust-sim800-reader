@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let arguments = Arguments::parse();
     let port = serialport::new(arguments.serial_port(), arguments.baud_rate())
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(arguments.timeout()))
         .open()?;
     let mut sim800 = Sim800::new(port)?;
     sim800.send(r#"AT"#)?;
@@ -36,11 +36,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             status: NetworkRegistrationStatus::RegisteredRoaming,
             ..
         }) => println!("Module ready and registered in network."),
-        _ => {
-            error!("Not registered in network.");
-
-            return Ok(());
-        }
+        _ => println!("Not registered in network."),
     }
 
     sim800.send(r#"AT+CMEE=2"#)?;
@@ -59,8 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } => {
                     let mark = match status {
                         SmsMessageStatus::ReceivedUnread => "<-",
-                        SmsMessageStatus::ReceivedRead => "--",
-                        SmsMessageStatus::StoredUnsent => "--",
+                        SmsMessageStatus::ReceivedRead | SmsMessageStatus::StoredUnsent => "--",
                         SmsMessageStatus::StoredSent => "->",
                     };
 
@@ -80,7 +75,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     if arguments.delete_messages() {
         for message in sim800.send_list(r#"AT+CMGL="ALL""#)? {
             match message {
-                Response::ListSmsMessage { index, .. } => {
+                Response::ListSmsMessage { index, status, .. }
+                    if status == SmsMessageStatus::ReceivedRead
+                        || status == SmsMessageStatus::StoredSent =>
+                {
                     sim800.send(&format!(r#"AT+CMGD={},0"#, index))?
                 }
                 _ => {}
